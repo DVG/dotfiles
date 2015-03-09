@@ -7,6 +7,7 @@ then
   curl https://raw.githubusercontent.com/creationix/nvm/v0.24.0/install.sh | bash
   source ~/.nvm/nvm.sh
   nvm install 0.10
+  nvm use 0.10
   nvm alias default stable
 
   npm install -g bower
