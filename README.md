@@ -1,7 +1,8 @@
 # DVG's Dotfiles
 
-Clone Recursively to get submodules as well
-
 ```
-$ git clone --recursive https://github.com/DVG/dotfiles.git
+$ git clone https://github.com/DVG/dotfiles.git .dotfiles
+$ cd .dotfiles
+$ scripts/boostrap.sh
+$ scripts/install
 ```
