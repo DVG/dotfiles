@@ -1,2 +1,11 @@
-gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
-\curl -sSL https://get.rvm.io | bash -s -- --ignore-dotfiles
+#!/usr/bin/env bash
+
+# Install RbEnv
+
+git clone https://github.com/sstephenson/rbenv.git ~/.rbenv
+
+# Install Ruby Build
+git clone https://github.com/sstephenson/ruby-build.git ~/.rbenv/plugins/ruby-build
+
+# Automatic Rehashing
+git clone https://github.com/sstephenson/rbenv-gem-rehash.git ~/.rbenv/plugins/rbenv-gem-rehash
