@@ -1,0 +1,83 @@
+###########################
+# Powerline
+###########################
+run-shell "powerline-daemon -q"
+source ~/.powerline/powerline/bindings/tmux/powerline.conf
+
+###########################
+# Key Bindings
+###########################
+set -g prefix C-a
+unbind C-b
+
+# Quickly Reload .tmux.conf
+bind r source-file ~/.tmux.conf \;
+  display "Reloaded!"
+
+# Send C-a to undelyinng application by pressing it twice
+bind C-a send-prefix
+
+# Split vertically with |
+bind | split-window -h -c "#{pane_current_path}"
+
+# Split horizontally with -
+bind - split-window -v -c "#{pane_current_path}"
+
+bind-key c new-window -c $PWD
+
+bind x kill-session
+
+# increase scroll-back history
+set -g history-limit 5000000
+
+# quickly switch panes
+unbind ^J
+bind ^J select-pane -t :.+
+
+set-option -g allow-rename off
+
+set -s escape-time 1
+
+bind C-m set -g mode-mouse on
+bind C-n set -g mode-mouse off
+
+#########################
+# Colors
+#########################
+
+set -g default-terminal "screen-256color"
+
+#########################
+# Status Bar
+##########################
+
+# enable UTF-8 support in status bar
+set -g status-utf8 on
+
+# set refresh interval for status bar
+set -g status-interval 10
+
+# center the status bar
+set -g status-justify left
+
+# show session, window, pane in left status bar
+set -g status-left-length 40
+set -g status-left '#[fg=colour231, bg=colour31, bold] #S #[fg=colour31, bg=black]⮀'
+
+# show build status hostname, date, and time in status bar
+set -g status-right-length 100
+
+# color status bar
+ set -g status-bg colour235
+ set -g status-fg white
+# highlight current window
+set-window-option -g window-status-current-format "#[fg=colour235, bg=colour31, bold]⮀#[fg=colour255, bg=colour31, bold] #I ⮁ #W #[fg=colour31, bg=colour235]⮀"
+
+# set color of active pane
+ set -g pane-border-fg colour235
+ set -g pane-border-bg black
+ set -g pane-active-border-fg green
+ set -g pane-active-border-bg black
+
+# source local configuration
+source-file ~/.tmux.local.conf
