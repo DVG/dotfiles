@@ -9,3 +9,11 @@ git clone https://github.com/sstephenson/ruby-build.git ~/.rbenv/plugins/ruby-bu
 
 # Automatic Rehashing
 git clone https://github.com/sstephenson/rbenv-gem-rehash.git ~/.rbenv/plugins/rbenv-gem-rehash
+
+source $(dirname $0)/path.zsh
+source $(dirname $0)/rbenv.zsh
+
+rbenv install 2.2.0
+rbenv global 2.2.0
+
+gem install bundler
