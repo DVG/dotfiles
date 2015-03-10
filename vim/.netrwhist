@@ -1,9 +1,0 @@
-let g:netrw_dirhistmax  =10
-let g:netrw_dirhist_cnt =7
-let g:netrw_dirhist_1='/home/o572014/.dotfiles'
-let g:netrw_dirhist_2='/home/o572014'
-let g:netrw_dirhist_3='/home/o572014/.dotfiles/vim'
-let g:netrw_dirhist_4='/home/o572014/code/projects/rsam'
-let g:netrw_dirhist_5='/home/o572014'
-let g:netrw_dirhist_6='/home/o572014/.pulse'
-let g:netrw_dirhist_7='/home/o572014/.config/powerline'
