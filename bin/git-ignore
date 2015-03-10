@@ -1,0 +1,5 @@
+#!/bin/sh
+#
+# Appends specified file or path to gitignore
+
+echo "$1" >> .gitignore
