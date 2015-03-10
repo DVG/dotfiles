@@ -2,16 +2,12 @@
 export ZSH=$HOME/.oh-my-zsh
 export DOTFILES_DIR=/$HOME/.dotfiles
 ZSH_CUSTOM=$DOTFILES_DIR/zsh
-ZSH_THEME="dvg-agnoster"
+ZSH_THEME="agnoster"
 source $ZSH/oh-my-zsh.sh
 
 # Projects Folder
 export PROJECTS=~/code/projects
 
-# if [[ -a ~/.localrc ]]
-#   then
-#   source ~/.localrc
-# fi
 
 # all of our zsh files
 typeset -U config_files
@@ -35,5 +31,10 @@ do
   source $file
 done
 
-# NVM Doesn't Like it unless it's last
+ if [[ -a ~/.localrc ]]
+   then
+   source ~/.localrc
+ fi
+
+ # NVM Doesn't Like it unless it's last
 source ~/.nvm/nvm.sh
