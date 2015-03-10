@@ -8,4 +8,4 @@ git clone https://github.com/Shougo/neobundle.vim ~/.vim/bundle/neobundle.vim
 
 # Install Plugins
 cd ~/.vim
-vim +PluginInstall +qall
+vim +NeoBundleInstall +qall
