@@ -65,6 +65,14 @@ prompt_context() {
   fi
 }
 
+# Displays a segment if dev_root is set
+prompt_dev_root() {
+  if [ "$DEV_ROOT" ]; then
+    prompt_segment 148 22 "✨ DR ✨"
+  fi  
+
+}
+
 # Git: branch/detached head, dirty status
 prompt_git() {
   local ref dirty mode repo_path
@@ -169,6 +177,7 @@ build_prompt() {
   RETVAL=$?
   prompt_status
   prompt_virtualenv
+  prompt_dev_root
   prompt_context
   prompt_dir
   prompt_git
