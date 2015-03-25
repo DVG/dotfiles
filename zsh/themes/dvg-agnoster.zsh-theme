@@ -73,6 +73,10 @@ prompt_dev_root() {
 
 }
 
+prompt_ruby() {
+  prompt_segment 160 52 "💎 $(ruby -e 'print RUBY_VERSION')"
+}
+
 # Git: branch/detached head, dirty status
 prompt_git() {
   local ref dirty mode repo_path
@@ -178,6 +182,7 @@ build_prompt() {
   prompt_status
   prompt_virtualenv
   prompt_dev_root
+  prompt_ruby
   prompt_context
   prompt_dir
   prompt_git
