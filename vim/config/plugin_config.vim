@@ -17,7 +17,8 @@ NeoBundle 'wgibbs/vim-irblack.git'
 NeoBundle 'tpope/vim-abolish.git'
 NeoBundle 'Lokaltog/powerline', {'rtp': 'powerline/bindings/vim/'}
 NeoBundle 'thoughtbot/vim-rspec'
-
+NeoBundle 'godlygeek/tabular'
+NeoBundle 'plasticboy/vim-markdown'
 
 " CtrlP - with FuzzyFinder compatible keymaps
 NeoBundle 'kien/ctrlp.vim'
