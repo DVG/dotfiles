@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Powifies an app
+#
+# Example:
+#   $ pow myapp
+
+app="$PWD/$1"
+echo "====> Powifying $app"
+
+cd ~/.pow
+ln -s $app
+
+echo "====> Done!"
