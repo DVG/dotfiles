@@ -20,6 +20,9 @@ NeoBundle 'thoughtbot/vim-rspec'
 NeoBundle 'godlygeek/tabular'
 NeoBundle 'plasticboy/vim-markdown'
 
+" Automatically wrap long commit messages
+au FileType gitcommit set tw=72
+
 " CtrlP - with FuzzyFinder compatible keymaps
 NeoBundle 'kien/ctrlp.vim'
 nnoremap <Leader>b :<C-U>CtrlPBuffer<CR>
