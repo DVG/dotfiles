@@ -15,7 +15,9 @@ browser.goto "http://www.bestbuy.com/site/apple-apple-pencil-for-ipad-pro-white/
 cart_button = browser.div(class: 'cart-button')
 
 if cart_button.text != "Sold Out Online"
-  notify "Check bestbuy.com to buy", title: 'Apple Pencil Available'
+  notify "✨✨✨✨✨✨ Check bestbuy.com to buy ✨✨✨✨✨✨", title: 'Apple Pencil Available'
+else
+  notify "💔 Still Nothing", title: 'No Dice'
 end
 
 browser.close
