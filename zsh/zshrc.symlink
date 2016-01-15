@@ -37,6 +37,3 @@ for file in ${(M)config_files:#*/path.zsh}
 do
   source $file
 done
-
- # NVM Doesn't Like it unless it's last
-source ~/.nvm/nvm.sh
