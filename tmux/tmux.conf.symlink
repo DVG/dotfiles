@@ -10,10 +10,6 @@ source ~/.powerline/powerline/bindings/tmux/powerline.conf
 set -g prefix C-a
 unbind C-b
 
-# Quickly Reload .tmux.conf
-bind r source-file ~/.tmux.conf \;
-  display "Reloaded!"
-
 # Send C-a to undelyinng application by pressing it twice
 bind C-a send-prefix
 
