@@ -10,7 +10,7 @@ source ~/.powerline/powerline/bindings/tmux/powerline.conf
 set -g prefix C-a
 unbind C-b
 
-# Send C-a to undelyinng application by pressing it twice
+# Send C-a to underlying application by pressing it twice
 bind C-a send-prefix
 
 # Split vertically with |
@@ -59,9 +59,6 @@ set -g status-justify left
 # show session, window, pane in left status bar
 set -g status-left-length 40
 set -g status-left '#[fg=colour231, bg=colour31, bold] #S #[fg=colour31, bg=black]'
-
-# show build status hostname, date, and time in status bar
-set -g status-right-length 100
 
 # color status bar
  set -g status-bg colour235
