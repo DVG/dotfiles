@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+echo "Killing Volumes"
+docker volume prune -f
+
+echo "Killing everything else"
+docker system prune -f

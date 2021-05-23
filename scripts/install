@@ -6,5 +6,22 @@ set -e
 
 cd "$(dirname $0)"/..
 
+xcode-select -p 1>/dev/null
+if [[ $? != 0 ]] ; then
+    # Install XCode Command Line Tools
+    xcode-select --install
+else
+    echo "macOS Command Line Tools already installed"
+fi
+
+# Install homebrew if it's not here
+which -s brew
+if [[ $? != 0 ]] ; then
+    # Install Homebrew
+    ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+else
+    brew update
+fi
+
 # find the installers and run them iteratively
 find . -name install.sh | while read installer ; do sh -c "${installer}" ; done

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+pbpaste | highlight -O rtf --line-numbers --font Hack --style base16/tomorrow --src-lang ruby | pbcopy
