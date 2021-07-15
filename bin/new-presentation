@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+die () {
+    echo >&2 "$@"
+    exit 1
+}
+
+[ "$#" -eq 1 ] || die "Name required to be passed in as an argument, $# provided"
+
+mkdir -p ~/Presentations
+cd ~/Presentations && git clone https://github.com/hakimel/reveal.js.git ~/Presentations/$1
+cd ~/Presentations/$1 && npm install
+code ~/Presentations/$1
+cd ~/Presentations/$1 && npm start
