@@ -60,9 +60,7 @@ prompt_end() {
 
 # Context: user@hostname (who am I and where am I)
 prompt_context() {
-  if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
-    prompt_segment black default "%(!.%{%F{yellow}%}.)$USER@%m"
-  fi
+
 }
 
 # Displays a segment if dev_root is set
@@ -75,6 +73,12 @@ prompt_dev_root() {
 
 prompt_ruby() {
   prompt_segment 160 52 "💎 $(ruby -e 'print RUBY_VERSION')"
+}
+
+prompt_python() {
+  PYTHON_VERSION=$(python -V)
+  PYTHON_VERSION=${PYTHON_VERSION//"Python "/}
+  prompt_segment 0 42 "🐍 $(echo $PYTHON_VERSION)"
 }
 
 # Git: branch/detached head, dirty status
@@ -183,6 +187,7 @@ build_prompt() {
   prompt_virtualenv
   prompt_dev_root
   prompt_ruby
+  prompt_python
   prompt_context
   prompt_dir
   prompt_git
