@@ -31,73 +31,52 @@ end
 ```
 require 'rails_helper'
 
-RSpec.describe "/brands", type: :request do
+RSpec.describe "/widgets", type: :request do
   include_context :accounts_and_users
   before { sign_in user }
 
   shared_examples :authorized_requests do
-    describe "HTML POST /brands" do
+    describe "HTML POST /widgets" do
 
       describe :successful_requests do
         let(:params) do
-          { brand: { name: 'New Brand', account_id: account.id } }
+          { brand: { name: 'New Widget', account_id: account.id } }
         end
 
-        let(:new_brand) { Brand.last }
-        before { post brands_path, params: params }
-        it { expect(response).to redirect_to brand_path(new_brand) }
-        it { expect(new_brand.name).to eq 'New Brand' }
-        it { expect(new_brand.account).to eq account }
+        let(:new_widget) { Widget.last }
+        before { post widgets, params: params }
+        it { expect(response).to redirect_to widget_path(new_widget) }
+        it { expect(new_widget.name).to eq 'New Widget' }
+        it { expect(new_widget.account).to eq account }
       end
 
     end
   end
 
   shared_examples :unauthorized_requests do
-    describe "HTML POST /brands" do
+    describe "HTML POST /widgets" do
         let(:params) do
-          { brand: { name: 'New Brand', account_id: account.id } }
+          { widget: { name: 'New Brand', account_id: account.id } }
         end
 
-        let(:new_brand) { Brand.last }
-        before { post brands_path, params: params }
+        let(:new_widget) { Brand.last }
+        before { post widgets_path, params: params }
         it { expect(response).to redirect_to root_path }
-        it { expect(new_brand).to_not be }
+        it { expect(new_widget).to_not be }
     end
   end
 
-  shared_examples :feature_flagged_requests do
-    describe "HTML POST /brands" do
-      let(:params) do
-        { brand: { name: 'New Brand', account_id: account.id } }
-      end
-      let(:new_brand) { Brand.last }
-      before { post brands_path, params: params }
-      it { expect(response).to redirect_to home_path }
-      it { expect(new_brand).to_not be }
-    end
-  end
-
-  context "when logged in as an merchant account member in the feature flag cohort" do
-    let!(:user) { merchant_user }
-    before { Flipper.enable(:alpha, merchant_user) }
+  context "when logged in as an account member" do
+    let!(:user) { account_user }
     let(:account) { user.current_account }
     it_behaves_like :authorized_requests
   end
 
-  context "when logged in as another merchant account member in the feature flag cohort" do
-    let!(:user) { other_merchant_user }
-    before { Flipper.enable(:alpha, other_merchant_user) }
-    let!(:account) { merchant_account }
+  context "when logged in as another merchant account member" do
+    let!(:user) { other_account_user }
+    let!(:account) { other_account_user.current_account }
     it_behaves_like :unauthorized_requests
   end
-
-  context "when logged in as a merhcant account member not in the feature flag cohort" do
-    let!(:user) { merchant_user }
-    let(:account) { user.current_account }
-    it_behaves_like :feature_flagged_requests
-  end
-
 end
 ```
 
