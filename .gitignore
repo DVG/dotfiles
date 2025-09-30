@@ -1,3 +1,5 @@
 vim/build
 vim/bundle
 vim/.netrwhist
+secrets
+devops/*.yml

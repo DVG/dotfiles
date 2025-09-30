@@ -1,0 +1,692 @@
+#!/usr/bin/env ruby
+
+# Inline Gemfile
+require 'bundler/inline'
+
+gemfile do
+  source 'https://rubygems.org'
+  gem 'thor', '~> 1.2'
+  gem 'colorize', '~> 0.8'
+  gem 'yaml', '~> 0.2'
+  gem 'json', '~> 2.6'
+  gem 'tty-spinner', '~> 0.9'
+  gem 'tty-table', '~> 0.12'
+  gem 'debug'
+end
+
+require 'thor'
+require 'yaml'
+require 'json'
+require 'fileutils'
+require 'pathname'
+require 'colorize'
+require 'tty-spinner'
+require 'tty-table'
+require 'debug'
+
+class DevOpsCLI < Thor
+  include Thor::Actions
+
+  # Configuration directories
+  CONFIG_DIR = File.expand_path('~/.devops-cli')
+  DOTFILES_DIR = ENV['DOTFILES_DIR'] || File.expand_path('~/.dotfiles')
+  PROJECTS_CONFIG_DIR = File.join(DOTFILES_DIR, 'devops')
+  SUBCOMMAND_DIRECTORY = File.join(DOTFILES_DIR, 'devops/subcommands')
+  GLOBAL_CONFIG = File.join(CONFIG_DIR, 'config.yml')
+
+  require_relative "#{SUBCOMMAND_DIRECTORY}/agent_commands.rb"
+
+  class_option :verbose, type: :boolean, aliases: '-v', desc: 'Verbose output'
+  class_option :dry_run, type: :boolean, desc: 'Show commands without executing'
+
+  def initialize(*args)
+    super
+    ensure_config_dirs
+    @config = load_config
+    @project_name = detect_project_name
+    @repo_config = load_repo_config
+  end
+
+  desc 'install', 'Install dependencies for the current repository'
+  def install
+    execute_command('install', 'Installing dependencies...')
+  end
+
+  desc 'start', 'Start the development server'
+  option :port, type: :numeric, desc: 'Port to run server on'
+  option :env, type: :string, default: 'development', desc: 'Environment to run in'
+  def start
+    cmd = get_command('start')
+    cmd = substitute_variables(cmd, port: options[:port], env: options[:env]) if cmd
+    execute_command_direct(cmd || default_start_command, 'Starting server...')
+  end
+
+  desc 'test [FILES...]', 'Run tests (optionally on specific files/patterns)'
+  option :pattern, type: :string, desc: 'Test pattern to run (deprecated: use arguments instead)'
+  option :coverage, type: :boolean, desc: 'Run with coverage'
+  def test(*files)
+    cmd = get_command('test') || default_test_command
+    
+    # Handle legacy --pattern option or new file arguments
+    target_files = files.empty? ? [options[:pattern]].compact : files
+    
+    execute_command_with_args(cmd, target_files, 'Running tests...')
+  end
+
+  desc 'lint [FILES...]', 'Run linters (optionally on specific files/directories)'
+  option :fix, type: :boolean, desc: 'Auto-fix issues where possible'
+  def lint(*files)
+    cmd = get_command('lint') || default_lint_command
+    
+    # Apply fix flag if requested
+    if options[:fix]
+      cmd = cmd.gsub('{{fix}}', get_fix_flag)
+    else
+      cmd = cmd.gsub(' {{fix}}', '').gsub('{{fix}}', '')
+    end
+    
+    execute_command_with_args(cmd, files, 'Running linters...')
+  end
+
+  desc 'logs [LOG_FILES...]', 'Tail application logs (optionally specific log files)'
+  option :follow, type: :boolean, default: true, desc: 'Follow log output'
+  option :lines, type: :numeric, default: 100, desc: 'Number of lines to show'
+  def logs(*files)
+    cmd = get_command('logs')
+    
+    unless cmd
+      puts "No logs command configured for project: #{@project_name}".colorize(:yellow)
+      puts "Run 'devops setup' to create a configuration file.".colorize(:blue)
+      return
+    end
+    
+    execute_command_with_args(cmd, files, 'Tailing logs...')
+  end
+
+  desc 'build', 'Build the application'
+  option :env, type: :string, default: 'production', desc: 'Build environment'
+  def build
+    cmd = get_command('build')
+    cmd = substitute_variables(cmd, env: options[:env]) if cmd
+    execute_command_direct(cmd || default_build_command, 'Building application...')
+  end
+
+  desc 'deploy', 'Deploy the application'
+  option :env, type: :string, default: 'staging', desc: 'Deployment environment'
+  option :confirm, type: :boolean, desc: 'Skip confirmation prompt'
+  def deploy
+    unless options[:confirm]
+      return unless yes?("Deploy to #{options[:env]}? (y/N)".colorize(:yellow))
+    end
+    
+    cmd = get_command('deploy')
+    cmd = substitute_variables(cmd, env: options[:env]) if cmd
+    execute_command_direct(cmd, "Deploying to #{options[:env]}...")
+  end
+
+  desc 'health [ENDPOINTS...]', 'Check application health (optionally specific endpoints)'
+  option :endpoint, type: :string, desc: 'Health check endpoint'
+  option :env, type: :string, default: 'production', desc: 'Environment to check'
+  def health(*endpoints)
+    if endpoints.empty?
+      execute_health_check
+    else
+      endpoints.each { |endpoint| execute_health_check(endpoint) }
+    end
+  end
+
+  desc 'setup [PROJECT_NAME]', 'Initialize configuration for current repository'
+  option :name, type: :string, desc: 'Override project name'
+  def setup(project_name = nil)
+    @project_name = project_name || options[:name] || detect_project_name
+    create_repo_config
+  end
+
+  desc 'config [PROJECT_NAME]', 'Show configuration for current or specified project'
+  def config(project_name = nil)
+    target_project = project_name || @project_name
+    
+    puts "Global Config:".colorize(:cyan)
+    puts YAML.dump(@config)
+    
+    project_config = project_name ? load_project_config(project_name) : @repo_config
+    
+    if project_config
+      puts "\nProject Config (#{target_project}):".colorize(:cyan)
+      puts YAML.dump(project_config)
+    else
+      puts "\nNo configuration found for project: #{target_project}".colorize(:yellow)
+      puts "Run 'devops setup' to create one."
+    end
+  end
+
+  desc 'list', 'List all configured projects'
+  def list
+    projects = list_configured_projects
+    
+    if projects.empty?
+      puts "No projects configured yet.".colorize(:yellow)
+      puts "Run 'devops setup' in a project directory to get started."
+      return
+    end
+
+    table = TTY::Table.new do |t|
+      t << ['Project', 'Type', 'Config File']
+      projects.each do |project|
+        config_file = File.join(PROJECTS_CONFIG_DIR, "#{project}.yml")
+        project_config = load_project_config(project)
+        project_type = project_config&.dig('type') || 'unknown'
+        t << [project, project_type.capitalize, File.exist?(config_file) ? '✓' : '✗']
+      end
+    end
+    
+    puts "Configured Projects:".colorize(:cyan)
+    puts table.render(:unicode)
+  end
+
+  desc 'debug COMMAND [ARGS...]', 'Debug command execution (shows what would be run)'
+  def debug(command, *args)
+    puts "Command: #{command}".colorize(:cyan)
+    puts "Arguments: #{args.inspect}".colorize(:cyan)
+    puts "Project: #{@project_name}".colorize(:cyan)
+    
+    base_cmd = get_command(command)
+    if base_cmd
+      puts "Base command: #{base_cmd}".colorize(:blue)
+      
+      # Apply the same logic as execute_command_with_args
+      final_command = if args && !args.empty?
+        clean_args = args.compact.reject(&:empty?)
+        if clean_args.any?
+          quoted_args = clean_args.map { |arg| arg.include?(' ') ? "\"#{arg}\"" : arg }
+          base_cmd.gsub('{{args}}', quoted_args.join(' '))
+        else
+          base_cmd.gsub(' {{args}}', '').gsub('{{args}}', '')
+        end
+      else
+        base_cmd.gsub(' {{args}}', '').gsub('{{args}}', '')
+      end
+      
+      puts "Final command: #{final_command}".colorize(:green)
+    else
+      puts "No command configured for '#{command}'".colorize(:red)
+      
+      default_cmd = case command
+      when 'test' then default_test_command
+      when 'lint' then default_lint_command
+      else nil
+      end
+      
+      if default_cmd
+        puts "Default command: #{default_cmd}".colorize(:yellow)
+        
+        final_default = if args && !args.empty?
+          clean_args = args.compact.reject(&:empty?)
+          if clean_args.any?
+            quoted_args = clean_args.map { |arg| arg.include?(' ') ? "\"#{arg}\"" : arg }
+            default_cmd.gsub('{{args}}', quoted_args.join(' '))
+          else
+            default_cmd.gsub(' {{args}}', '').gsub('{{args}}', '')
+          end
+        else
+          default_cmd.gsub(' {{args}}', '').gsub('{{args}}', '')
+        end
+        
+        puts "Final default: #{final_default}".colorize(:green)
+      end
+    end
+  end
+
+  desc 'edit [PROJECT_NAME]', 'Edit configuration for current or specified project'
+  def edit(project_name = nil)
+    target_project = project_name || @project_name
+    config_file = File.join(PROJECTS_CONFIG_DIR, "#{target_project}.yml")
+    
+    unless File.exist?(config_file)
+      puts "No configuration found for project: #{target_project}".colorize(:red)
+      puts "Run 'devops setup #{target_project}' to create one."
+      return
+    end
+
+    editor = ENV['EDITOR'] || 'vim'
+    system("#{editor} #{config_file}")
+  end
+
+  desc 'status [PROJECT_NAME]', 'Show repository status and available commands'
+  def status(project_name = nil)
+    target_project = project_name || @project_name
+    project_config = project_name ? load_project_config(project_name) : @repo_config
+
+    show_status(target_project, project_config)
+  end
+
+  desc 'open', 'for frontends. Open the client'
+  def open(project_name = nil)
+    target_project = project_name || @project_name
+    project_config = project_name ? load_project_config(project_name) : @repo_config
+
+    port = project_config.dig("environment", "development", "port")
+    if port
+      puts "🗺️ Opening Client App"
+      url = "http://localhost:{{port}}".gsub("{{port}}", port.to_s)
+      `open #{url}`
+    else
+      puts "❌ Not a front end client"
+    end
+  end
+
+  # Subcommands
+  desc 'agent SUBCOMMAND', 'Git worktree management for AI agent workflows'
+  subcommand 'agent', AgentCommands
+
+  private
+
+  def ensure_config_dirs
+    FileUtils.mkdir_p(CONFIG_DIR) unless Dir.exist?(CONFIG_DIR)
+    FileUtils.mkdir_p(PROJECTS_CONFIG_DIR) unless Dir.exist?(PROJECTS_CONFIG_DIR)
+
+    unless File.exist?(GLOBAL_CONFIG)
+      create_global_config
+    end
+  end
+
+  def create_global_config
+    default_config = {
+      'default_commands' => {
+        'install' => {
+          'ruby' => 'bundle install',
+          'node' => 'npm install',
+          'python' => 'pip install -r requirements.txt',
+          'go' => 'go mod download'
+        },
+        'start' => {
+          'ruby' => 'bundle exec rails server',
+          'node' => 'npm start',
+          'python' => 'python manage.py runserver',
+          'go' => 'go run main.go'
+        },
+        'test' => {
+          'ruby' => 'bundle exec rspec {{args}}',
+          'node' => 'npm test -- {{args}}',
+          'python' => 'pytest {{args}}',
+          'go' => 'go test {{args}}'
+        },
+        'lint' => {
+          'ruby' => 'bundle exec rubocop {{fix}} {{args}}',
+          'node' => 'npm run lint -- {{fix}} {{args}}',
+          'python' => 'flake8 {{args}}',
+          'go' => 'golangci-lint run {{args}}'
+        }
+      },
+      'health_check' => {
+        'timeout' => 30,
+        'endpoints' => {
+          'default' => '/health'
+        }
+      }
+    }
+    
+    File.write(GLOBAL_CONFIG, YAML.dump(default_config))
+    puts "Created global configuration at #{GLOBAL_CONFIG}".colorize(:green)
+    puts "Project configurations will be stored in #{PROJECTS_CONFIG_DIR}".colorize(:blue)
+  end
+
+  def load_config
+    YAML.load_file(GLOBAL_CONFIG) if File.exist?(GLOBAL_CONFIG)
+  rescue StandardError => e
+    puts "Error loading global config: #{e.message}".colorize(:red)
+    {}
+  end
+
+  def load_repo_config
+    return nil unless @project_name
+    load_project_config(@project_name)
+  end
+
+  def load_project_config(project_name)
+    config_file = File.join(PROJECTS_CONFIG_DIR, "#{project_name}.yml")
+    return nil unless File.exist?(config_file)
+
+    YAML.load_file(config_file)
+  rescue StandardError => e
+    puts "Error loading project config for #{project_name}: #{e.message}".colorize(:red)
+    nil
+  end
+
+  def detect_project_name
+    # Try to get project name from various sources
+    
+    # 1. Git repository name
+    if Dir.exist?('.git')
+      begin
+        git_remote = `git remote get-url origin 2>/dev/null`.strip
+        if !git_remote.empty?
+          # Extract name from git URL (handles both SSH and HTTPS)
+          name = git_remote.split('/').last.gsub(/\.git$/, '')
+          return name unless name.empty?
+        end
+      rescue StandardError
+        # Fall through to other methods
+      end
+    end
+    
+    # 2. Package.json name
+    if File.exist?('package.json')
+      begin
+        package_json = JSON.parse(File.read('package.json'))
+        name = package_json['name']
+        return name if name && !name.empty?
+      rescue StandardError
+        # Fall through
+      end
+    end
+    
+    # 3. Gemfile or gemspec name
+    if File.exist?('Gemfile')
+      gemfiles = Dir.glob('*.gemspec')
+      unless gemfiles.empty?
+        gemspec_name = File.basename(gemfiles.first, '.gemspec')
+        return gemspec_name unless gemspec_name.empty?
+      end
+    end
+    
+    # 4. Directory name as fallback
+    File.basename(Dir.pwd)
+  end
+
+  def find_repo_config_file
+    # This method is kept for backward compatibility but now points to dotfiles
+    config_file = File.join(PROJECTS_CONFIG_DIR, "#{@project_name}.yml")
+    File.exist?(config_file) ? config_file : nil
+  end
+
+  def list_configured_projects
+    return [] unless Dir.exist?(PROJECTS_CONFIG_DIR)
+    
+    Dir.glob(File.join(PROJECTS_CONFIG_DIR, '*.yml')).map do |file|
+      File.basename(file, '.yml')
+    end.sort
+  end
+
+  def create_repo_config
+    project_type = detect_project_type
+    
+    config = {
+      'name' => @project_name,
+      'type' => project_type,
+      'commands' => {
+        'install' => get_default_command('install', project_type),
+        'start' => get_default_command('start', project_type),
+        'test' => get_default_command('test', project_type),
+        'lint' => get_default_command('lint', project_type),
+        'build' => "echo 'No build command configured'",
+        'logs' => "tail -f log/development.log {{args}}",
+        'deploy' => "echo 'No deploy command configured'"
+      },
+      'health_check' => {
+        'url' => "http://localhost:3000/health",
+        'timeout' => 30
+      },
+      'environment' => {
+        'development' => {
+          'port' => 3000
+        },
+        'staging' => {
+          'url' => "https://#{@project_name}-staging.example.com"
+        },
+        'production' => {
+          'url' => "https://#{@project_name}.example.com"
+        }
+      }
+    }
+    
+    config_file = File.join(PROJECTS_CONFIG_DIR, "#{@project_name}.yml")
+    File.write(config_file, YAML.dump(config))
+    
+    puts "Created project configuration: #{config_file}".colorize(:green)
+    puts "Project: #{@project_name}".colorize(:blue)
+    puts "Project type detected: #{project_type}".colorize(:blue)
+    puts "Edit the file to customize commands for your project.".colorize(:yellow)
+    puts "Configuration stored in your dotfiles directory.".colorize(:cyan)
+  end
+
+  def detect_project_type
+    return 'ruby' if File.exist?('Gemfile') || File.exist?('config/application.rb')
+    return 'node' if File.exist?('package.json')
+    return 'python' if File.exist?('requirements.txt') || File.exist?('pyproject.toml')
+    return 'go' if File.exist?('go.mod')
+    return 'unknown'
+  end
+
+  def get_default_command(command, project_type)
+    @config.dig('default_commands', command, project_type) || "echo 'No #{command} command configured'"
+  end
+
+  def get_command(command)
+    @repo_config&.dig('commands', command)
+  end
+
+  def substitute_variables(command, variables = {})
+    result = command.dup
+    variables.each do |key, value|
+      next unless value
+      result.gsub!("{{#{key}}}", value.to_s)
+    end
+    result
+  end
+
+  def get_fix_flag
+    return '--fix' if @repo_config&.dig('type') == 'node'
+    return '-a' if @repo_config&.dig('type') == 'ruby'
+    '--fix'
+  end
+
+  def execute_command(command, message)
+    cmd = get_command(command)
+    
+    unless cmd
+      puts "No #{command} command configured for project: #{@project_name}".colorize(:yellow)
+      puts "Run 'devops setup' to create a configuration file.".colorize(:blue)
+      return
+    end
+    
+    execute_command_direct(cmd, message)
+  end
+
+  def execute_command_with_args(command, args, message)
+    return unless command
+    
+    if options[:verbose]
+      puts "Raw command: #{command}".colorize(:light_black)
+      puts "Arguments: #{args.inspect}".colorize(:light_black)
+    end
+    
+    # Replace {{args}} placeholder with provided arguments
+    final_command = if args && !args.empty?
+      # Filter out empty/nil args and join them
+      clean_args = args.compact.reject(&:empty?)
+      if clean_args.any?
+        # Properly quote arguments that contain spaces or special characters
+        quoted_args = clean_args.map { |arg| arg.include?(' ') ? "\"#{arg}\"" : arg }
+        command.gsub('{{args}}', quoted_args.join(' '))
+      else
+        command.gsub(' {{args}}', '').gsub('{{args}}', '')
+      end
+    else
+      # Remove args placeholder if no arguments provided
+      command.gsub(' {{args}}', '').gsub('{{args}}', '')
+    end
+    
+    if options[:verbose]
+      puts "Final command: #{final_command}".colorize(:light_black)
+    end
+    
+    execute_command_direct(final_command, message)
+  end
+
+  def execute_command_direct(command, message)
+    return unless command
+    
+    if options[:dry_run]
+      puts "Would execute: #{command}".colorize(:blue)
+      return
+    end
+
+    puts message.colorize(:blue) if message
+    
+    if options[:verbose]
+      puts "Executing: #{command}".colorize(:light_black)
+    end
+
+    success = system(command)
+    
+    if success
+      puts "✓ Completed successfully".colorize(:green)
+    else
+      puts "✗ Command failed".colorize(:red)
+      exit(1) unless options[:continue_on_error]
+    end
+  end
+
+  def execute_health_check(custom_endpoint = nil)
+    health_config = @repo_config&.dig('health_check') || @config&.dig('health_check')
+    
+    unless health_config
+      puts "No health check configuration found.".colorize(:yellow)
+      return
+    end
+
+    env = options[:env]
+    base_url = @repo_config&.dig('environment', env, 'url')
+    endpoint = custom_endpoint || options[:endpoint] || health_config['endpoint'] || '/health'
+    timeout = health_config['timeout'] || 30
+
+    unless base_url
+      puts "No URL configured for environment: #{env}".colorize(:red)
+      return
+    end
+
+    url = "#{base_url}#{endpoint}"
+    
+    puts "Checking health: #{url}".colorize(:blue)
+    
+    spinner = TTY::Spinner.new("[:spinner] Checking...", format: :dots)
+    spinner.auto_spin
+    
+    begin
+      require 'net/http'
+      require 'timeout'
+      
+      uri = URI(url)
+      response = Timeout.timeout(timeout) do
+        Net::HTTP.get_response(uri)
+      end
+      
+      spinner.stop
+      
+      if response.code == '200'
+        puts "✓ Health check passed".colorize(:green)
+        if options[:verbose] && response.body
+          puts "Response: #{response.body}"
+        end
+      else
+        puts "✗ Health check failed (#{response.code})".colorize(:red)
+        puts "Response: #{response.body}" if response.body
+      end
+      
+    rescue Timeout::Error
+      spinner.stop
+      puts "✗ Health check timed out after #{timeout}s".colorize(:red)
+    rescue StandardError => e
+      spinner.stop
+      puts "✗ Health check failed: #{e.message}".colorize(:red)
+    end
+  end
+
+  def default_start_command
+    case detect_project_type
+    when 'ruby' then 'bundle exec rails server'
+    when 'node' then 'npm start'
+    when 'python' then 'python manage.py runserver'
+    when 'go' then 'go run main.go'
+    else "echo 'No start command configured'"
+    end
+  end
+
+  def default_test_command
+    case detect_project_type
+    when 'ruby' then 'bundle exec rspec {{args}}'
+    when 'node' then 'npm test -- {{args}}'
+    when 'python' then 'pytest {{args}}'
+    when 'go' then 'go test {{args}}'
+    else "echo 'No test command configured'"
+    end
+  end
+
+  def default_lint_command
+    case detect_project_type
+    when 'ruby' then 'bundle exec rubocop {{fix}} {{args}}'
+    when 'node' then 'npm run lint -- {{fix}} {{args}}'
+    when 'python' then 'flake8 {{args}}'
+    when 'go' then 'golangci-lint run {{args}}'
+    else "echo 'No lint command configured'"
+    end
+  end
+
+  def default_build_command
+    case detect_project_type
+    when 'ruby' then 'bundle exec rails assets:precompile'
+    when 'node' then 'npm run build'
+    when 'python' then 'python setup.py build'
+    when 'go' then 'go build'
+    else "echo 'No build command configured'"
+    end
+  end
+
+  def show_status(project_name = nil, project_config = nil)
+    target_project = project_name || @project_name
+    config = project_config || @repo_config
+    
+    table = TTY::Table.new do |t|
+      t << ['Project', target_project || 'Unknown']
+      t << ['Directory', File.basename(Dir.pwd)]
+      t << ['Project Type', detect_project_type.capitalize]
+      t << ['Config File', config ? '✓ Found' : '✗ Not found']
+      t << ['Git Status', git_status]
+    end
+    
+    puts "Project Status".colorize(:cyan)
+    puts table.render(:unicode)
+    
+    if config
+      puts "\nAvailable Commands:".colorize(:cyan)
+      config['commands']&.each do |cmd, definition|
+        status = definition.include?('echo') ? '⚠ ' : '✓ '
+        puts "  #{status}#{cmd}".colorize(definition.include?('echo') ? :yellow : :green)
+      end
+      
+      config_file = File.join(PROJECTS_CONFIG_DIR, "#{target_project}.yml")
+      puts "\nConfiguration: #{config_file}".colorize(:light_black)
+    else
+      puts "\nRun 'devops setup' to configure commands for this project.".colorize(:yellow)
+      puts "Configuration will be stored in #{PROJECTS_CONFIG_DIR}/#{target_project}.yml".colorize(:light_black)
+    end
+  end
+
+  def git_status
+    return 'Not a git repository' unless Dir.exist?('.git')
+    
+    status_output = `git status --porcelain 2>/dev/null`
+    return 'Clean' if status_output.empty?
+    
+    changes = status_output.lines.count
+    "#{changes} uncommitted changes"
+  rescue StandardError
+    'Unknown'
+  end
+end
+
+# Make the script executable when run directly
+if __FILE__ == $PROGRAM_NAME
+  DevOpsCLI.start(ARGV)
+end
