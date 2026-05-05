@@ -3,3 +3,5 @@ vim/bundle
 vim/.netrwhist
 secrets
 devops/*.yml
+work/*.zsh
+.qlty

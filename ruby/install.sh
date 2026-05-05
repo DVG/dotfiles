@@ -13,7 +13,7 @@ git clone https://github.com/sstephenson/rbenv-gem-rehash.git ~/.rbenv/plugins/r
 source $(dirname $0)/path.zsh
 source $(dirname $0)/rbenv.zsh
 
-rbenv install 2.7.1
-rbenv global 2.7.1
+rbenv install 3.3.3
+rbenv global 3.3.3
 
 gem install bundler

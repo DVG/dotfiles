@@ -187,7 +187,6 @@ build_prompt() {
   prompt_virtualenv
   prompt_dev_root
   prompt_ruby
-  prompt_python
   prompt_context
   prompt_dir
   prompt_git

@@ -1,0 +1,1 @@
+alias cc="claude --allow-dangerously-skip-permissions --permission-mode plan"
